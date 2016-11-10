@@ -63,9 +63,6 @@ krb5_parse_name ctx name =
 foreign import ccall unsafe "krb5.h krb5_unparse_name"
   _krb5_unparse_name :: Context -> Ptr KerberosPrincipal -> Ptr CString -> IO CInt
 
-foreign import ccall unsafe "stdlib.h free"
-  _free :: Ptr a -> IO ()
-
 krb5_unparse_name :: Context -> Principal -> IO BS.ByteString
 krb5_unparse_name ctx principal =
   withForeignPtr principal $ \ptrprincipal ->
@@ -75,7 +72,7 @@ krb5_unparse_name ctx principal =
           if | code == 0 -> do
                   ctxt <- peek nstring
                   result <- BS.packCString ctxt
-                  _free ctxt
+                  free ctxt
                   return result
              | otherwise -> krb5_throw ctx code
 
