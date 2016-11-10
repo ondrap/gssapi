@@ -25,7 +25,9 @@ library
   hs-source-dirs:      src
 
 executable test
-  build-depends:       base >=4.8 && <4.9, haskell-gssapi, bytestring, resourcet, transformers
+  build-depends:       base >=4.8 && <4.9, haskell-gssapi, bytestring,
+                       resourcet, transformers, warp, wai, http-types,
+                       case-insensitive, base64-bytestring
   main-is:             Test.hs
   ghc-options:         -Wall -fwarn-incomplete-uni-patterns -threaded
   default-language:    Haskell2010
