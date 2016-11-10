@@ -1,6 +1,6 @@
-name:                gssapi
+name:                haskell-gssapi
 version:             0.1.0.0
-synopsis:            libgssapi bindings for haskell
+synopsis:            libgssapi and krb5 bindings for haskell
 -- description:
 license:             BSD3
 license-file:        LICENSE
