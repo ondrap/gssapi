@@ -2,10 +2,17 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiWayIf                 #-}
 {-# LANGUAGE OverloadedStrings                 #-}
+{-# LANGUAGE NamedFieldPuns                 #-}
+{-# LANGUAGE RecordWildCards                 #-}
 
-module Network.Security.GssApi where
+module Network.Security.GssApi (
+    gssAcquireCred
+  , gssImportName
+  , gssDisplayName
+  , gssAcceptSecContext
+) where
 
-import           Control.Exception            (Exception, mask_, throwIO, finally)
+import           Control.Exception            (Exception, mask_, throwIO, finally, bracketOnError)
 import           Control.Monad                (void)
 import           Control.Monad.IO.Class       (MonadIO, liftIO)
 import           Control.Monad.Trans.Resource (ResourceT, allocate)
@@ -13,6 +20,7 @@ import qualified Data.ByteString.Char8        as BS
 import           Foreign                      (Ptr, Storable, alloca, nullPtr,
                                                peek, poke)
 import           Foreign.C.Types
+import Foreign.Marshal.Alloc (free, malloc)
 
 import           Network.Security.GssTypes
 
@@ -38,6 +46,14 @@ foreign import capi "gssapi/gssapi.h value GSS_C_INDEFINITE" gscCIndefinite :: C
 
 newtype {-# CTYPE "gss_cred_usage_t" #-} GssCredUsageT = GssCredUsageT CInt deriving (Storable)
 foreign import capi "gssapi/gssapi.h value GSS_C_ACCEPT" gssCAccept :: GssCredUsageT
+
+newtype {-# CTYPE "gss_ctx_id_t" #-} GssCtxIdT = GssCtxIdT (Ptr ()) deriving (Storable)
+foreign import capi "gssapi/gssapi.h value GSS_C_NO_CONTEXT" gssCNoContext :: GssCtxIdT
+
+newtype {-# CTYPE "gss_channel_bindings_t" #-} GssChannelBindingsT = GssChannelBindingsT (Ptr ()) deriving (Storable)
+foreign import capi "gssapi/gssapi.h value GSS_C_NO_CHANNEL_BINDINGS" gssCNoChannelBindings :: GssChannelBindingsT
+
+foreign import capi "gssapi/gssapi.h value GSS_C_NO_BUFFER" gssCNoBuffer :: Ptr BufferDesc
 
 foreign import capi "gssapi/gssapi.h value GSS_C_MECH_CODE" gssCMechCode :: CUInt
 
@@ -131,12 +147,42 @@ gssReleaseCred name = alloca $ \minor -> void $ _gss_release_cred minor name
 gssReleaseBuffer :: Ptr BufferDesc -> IO ()
 gssReleaseBuffer bdesc = void $ alloca $ \minor -> _gss_release_buffer minor bdesc
 
--- foreign import ccall safe "gssapi/gssapi.h gss_accept_sec_context"
---   _gss_accept_sec_context :: Ptr CUInt -> Ptr GssCtxIdT -> GssCredIdT -> Ptr BufferDesc -> GssChannelBindingsT
---                               -> Ptr GssNameT -> Ptr GssOID -> Ptr BufferDesc -> Ptr CUInt -> Ptr CUInt
---                               -> Ptr GssCredIdT -> IO CUInt
---
+foreign import ccall safe "gssapi/gssapi.h gss_accept_sec_context"
+  _gss_accept_sec_context :: Ptr CUInt -> Ptr GssCtxIdT -> GssCredIdT -> Ptr BufferDesc -> GssChannelBindingsT
+                              -> Ptr GssNameT -> Ptr GssOID -> Ptr BufferDesc -> Ptr CUInt -> Ptr CUInt
+                              -> Ptr GssCredIdT -> IO CUInt
 
+foreign import ccall unsafe "gssapi/gssapi.h gss_delete_sec_context"
+  _gss_delete_sec_context :: Ptr CUInt -> Ptr GssCtxIdT -> Ptr BufferDesc -> IO CUInt
+
+data SecContextResult = SecContextResult {
+    sContext :: Ptr GssCtxIdT
+  , sClientName :: BS.ByteString
+  , sOutputToken :: BS.ByteString
+}
+
+gssAcceptSecContext :: GssCredIdT -> BS.ByteString -> ResourceT IO SecContextResult
+gssAcceptSecContext myCreds input = snd <$> allocate runAccept freeResult
+  where
+    freeResult SecContextResult{sContext} = do
+        void $ alloca $ \minor -> _gss_delete_sec_context minor sContext gssCNoBuffer
+        free sContext
+    runAccept =
+      alloca $ \minor ->
+        bracketOnError malloc free $ \sContext -> do
+          poke sContext gssCNoContext
+          alloca $ \bclient -> do
+            poke bclient gssCNoName
+            withBufferDesc input $ \binput ->
+              withBufferDesc "" $ \boutput -> do
+                major <- _gss_accept_sec_context minor sContext myCreds binput
+                              gssCNoChannelBindings bclient nullPtr
+                              boutput nullPtr nullPtr nullPtr
+                whenGssOk major minor $ do
+                    clname <- peek bclient
+                    sClientName <- gssDisplayName clname `finally` gssReleaseName clname
+                    sOutputToken <- peekBuffer boutput
+                    return SecContextResult{..}
 
 ---
 withBufferDesc :: BS.ByteString -> (Ptr BufferDesc -> IO a) -> IO a
