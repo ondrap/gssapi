@@ -18,14 +18,14 @@ library
   -- includes:            clib/hkrb5.h
   exposed-modules:     Network.Security.GssApi
   other-modules:       Network.Security.GssTypes
-  build-depends:       base >=4.8 && <4.9, bytestring
+  build-depends:       base >=4.8 && <4.9, bytestring, resourcet, transformers
   default-language:    Haskell2010
   ghc-options:         -Wall -fwarn-incomplete-uni-patterns
   extra-libraries:     gssapi_krb5
   hs-source-dirs:      src
 
 executable test
-  build-depends:       base >=4.8 && <4.9, gssapi, bytestring
+  build-depends:       base >=4.8 && <4.9, haskell-gssapi, bytestring, resourcet, transformers
   main-is:             Test.hs
   ghc-options:         -Wall -fwarn-incomplete-uni-patterns -threaded
   default-language:    Haskell2010
