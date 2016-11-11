@@ -39,7 +39,7 @@ main = do
   let port = 3000
       settings = defaultSettings & setPort port
       tsettings = tlsSettings "cert.pem" "key.pem"
-      authSettings = defaultGssSettings{gssRealm=Just "GAPP.CZ"}
+      authSettings = defaultGssSettings{gssRealm=Just "EXAMPLE.COM"}
   putStrLn $ "Listening on port " ++ show port
   runTLS tsettings settings (gssAuth authSettings app)
 ````
