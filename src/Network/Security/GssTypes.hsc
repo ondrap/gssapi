@@ -1,6 +1,7 @@
 {-# OPTIONS_HADDOCK hide #-}
 {-# LANGUAGE CPP         #-}
 
+-- | Implementation of FFI to gss_buffer_desc structure
 module Network.Security.GssTypes where
 
 import           Foreign

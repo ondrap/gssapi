@@ -3,6 +3,8 @@
 {-# LANGUAGE MultiWayIf               #-}
 {-# LANGUAGE OverloadedStrings        #-}
 
+-- | FFI binding to libkrb5 library
+
 module Network.Security.Kerberos (
     krb5Login
   , krb5Resolve
@@ -83,9 +85,10 @@ foreign import ccall unsafe "krb5.h krb5_free_error_message"
 
 krb5_throw :: Context -> CInt -> IO a
 krb5_throw ctx code = do
-    ctxt <- _krb5_get_error_message ctx code
-    errtext <- BS.packCString ctxt
-    _krb5_free_error_message ctx ctxt
+    errtext <- bracket
+                (_krb5_get_error_message ctx code)
+                (_krb5_free_error_message ctx)
+                BS.packCString
     throwIO (KrbException (fromIntegral code) errtext)
 
 foreign import ccall safe "hkrb5.h _hkrb5_login"

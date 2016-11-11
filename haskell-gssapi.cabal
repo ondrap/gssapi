@@ -2,16 +2,24 @@ name:                haskell-gssapi
 version:             0.1.0.0
 synopsis:            libgssapi and libkrb5 bindings for haskell
 description:         Simple bindings for libgssapi(SSO) and libkrb5(user/password) library.
-                     Basic
+                     .
+                     Basic WAI Middleware allows both SPNEGO and failback to Kerberos
+                     username/password authentication.
+
 license:             BSD3
 license-file:        LICENSE
 author:              Ondrej Palkovsky
 maintainer:          palkovsky.ondrej@gmail.com
+homepage:            https://github.com/ondrap/haskell-gssapi
 copyright:           Ondrej Palkovsky
 category:            Network
 build-type:          Simple
 extra-source-files:  examples/Main.hs examples/stack.yaml examples/haskell-gssapi-test.cabal clib/hkrb5.h
 cabal-version:       >=1.10
+
+source-repository head
+  type: git
+  location: https://github.com/ondrap/haskell-gssapi.git
 
 library
   exposed-modules:     Network.Security.Kerberos, Network.Security.GssApi, Network.Wai.Middleware.GssAuth

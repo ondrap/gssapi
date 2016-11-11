@@ -1,6 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 
+-- |
+-- Module : Network.Wai.Middleware.GssAuth
+-- License : BSD-style
+--
+-- Maintainer  : palkovsky.ondrej@gmail.com
+-- Stability   : experimental
+-- Portability : portable
+--
+-- WAI Middleware for SPNEGO authentication with failback to Basic authentication, where
+-- the username/password is checked using Kerberos library (i.e. kinit user@EXAMPLE.COM).
+
 module Network.Wai.Middleware.GssAuth (
     gssAuth
   , GssAuthSettings(..)
@@ -12,7 +23,6 @@ import           Control.Arrow                   (second)
 import           Control.Exception               (catch)
 import qualified Data.ByteString.Base64          as B64
 import qualified Data.ByteString.Char8           as BS
-import qualified Data.ByteString.Lazy.Char8      as BSL
 import qualified Data.CaseInsensitive            as CI
 import           Data.Maybe                      (fromMaybe)
 import           Data.Monoid                     ((<>))
@@ -30,6 +40,7 @@ import           System.IO.Unsafe
 import           Network.Security.GssApi
 import           Network.Security.Kerberos
 
+-- | Configuration structure for `gssAuth` middleware
 data GssAuthSettings = GssAuthSettings {
     gssRealm         :: Maybe BS.ByteString -- ^ Realm to use with both kerberos and gss authentication.
   , gssService       :: Maybe BS.ByteString -- ^ If set, use 'gssService@gssRealm' credentials from the keytab.
@@ -38,11 +49,13 @@ data GssAuthSettings = GssAuthSettings {
   , gssUserFull      :: Bool -- ^ Always return full user principal; normally, if the user realm is equal to gssRealm,
                              --   the realm is stripped
   , gssBasicFailback :: Bool -- ^ Allow failback to basic auth (username/password with kerberos api)
-  , gssForceRealm    :: Bool -- ^ Force use of `gssRealm` or default system realm in Basic auth
+  , gssForceRealm    :: Bool -- ^ Force use of `gssRealm` or default system realm in basic auth failback
   , gssOnAuthError   :: GssAuthSettings -> Maybe (Either KrbException GssException) -> Application
+    -- ^ Called upon GSSAPI/Kerberos error. It is supposed to return 401 return code with
+    --   'Authorize: Negotiate' and possibly 'Authorize: Basic realm=...' headers
 }
 
--- | Settings for `gssAuth` middleware
+-- | Default settings for `gssAuth` middleware
 defaultGssSettings :: GssAuthSettings
 defaultGssSettings = GssAuthSettings {
     gssRealm = Nothing
@@ -59,11 +72,15 @@ defaultGssSettings = GssAuthSettings {
         [(hWWWAuthenticate, "Negotiate"), (hWWWAuthenticate, "Basic realm=\"Auth\"")]
     authHeaders GssAuthSettings{gssBasicFailback=False} = [(hWWWAuthenticate, "Negotiate")]
 
-    authError settings Nothing _ respond = respond $ responseLBS status401 (authHeaders settings) "Unauthorized"
-    authError settings (Just (Left (KrbException _ err))) _ respond =
-        respond $ responseLBS status401 (authHeaders settings) (BSL.fromStrict $ "Unauthorized: " <> err)
-    authError settings (Just (Right (GssException _ err))) _ respond =
-        respond $ responseLBS status401 (authHeaders settings) (BSL.fromStrict $ "Unauthorized: " <> err)
+    baseResponse settings respond = respond $ responseLBS status401 (authHeaders settings) "Unauthorized"
+
+    authError settings Nothing _ respond = baseResponse settings respond
+    authError settings (Just (Left (KrbException _ err))) _ respond = do
+        putStrLn $ "Kerberos error: " <> show err
+        baseResponse settings respond
+    authError settings (Just (Right (GssException _ err))) _ respond = do
+        putStrLn $ "GSSAPI error: " <> show err
+        baseResponse settings respond
 
 -- | Key that is used to access the username in WAI vault
 gssAuthKey :: V.Key BS.ByteString

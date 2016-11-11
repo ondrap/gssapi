@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RecordWildCards            #-}
 
+-- | FFI binding to libgssapi 
 module Network.Security.GssApi (
     runGssCheck
   , GssException(..)
@@ -137,6 +138,7 @@ gssDisplayStatus rstatus =
       alloca $ \msgctx -> do
           poke msgctx 0
           withBufferDesc "" $ \bdesc -> do
+              -- TODO: This could produce more than 1 line, we should fetch all of them
               poke bdesc (BufferDesc 0 nullPtr)
               major <- _gss_display_status minor rstatus gssCMechCode gssCNoOid msgctx bdesc
               whenGssOk major minor $ peekBuffer bdesc
@@ -201,10 +203,10 @@ gssAcceptSecContext myCreds input = snd <$> allocate runAccept freeResult
                     sOutputToken <- peekBuffer boutput
                     return SecContextResult{..}
 
-
+-- | Perform a simple gss_accept_sec_context test. Throws exception upon any error.
 runGssCheck ::
-     Maybe BS.ByteString -- ^ Principal name
-  -> BS.ByteString       -- ^ Input token
+     Maybe BS.ByteString -- ^ Service principal (e.g. "HTTP/foo.example.com@EXAMPLE.COM")
+  -> BS.ByteString       -- ^ Input token (content of the Authorization: Negotiate header)
   -> IO (BS.ByteString, BS.ByteString) -- ^ (client name, output token)
 runGssCheck mcredname input_token =
   runResourceT $ do
