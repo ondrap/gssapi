@@ -1,26 +1,26 @@
 {-# LANGUAGE CApiFFI                    #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiWayIf                 #-}
-{-# LANGUAGE OverloadedStrings                 #-}
-{-# LANGUAGE NamedFieldPuns                 #-}
-{-# LANGUAGE RecordWildCards                 #-}
+{-# LANGUAGE NamedFieldPuns             #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RecordWildCards            #-}
 
 module Network.Security.GssApi (
-    gssAcquireCred
-  , gssImportName
-  , gssDisplayName
-  , gssAcceptSecContext
+    runGssCheck
+  , GssException(..)
 ) where
 
-import           Control.Exception            (Exception, mask_, throwIO, finally, bracketOnError)
-import           Control.Monad                (void)
+import           Control.Exception            (Exception, bracketOnError,
+                                               finally, mask_, throwIO)
+import           Control.Monad                (void, when, (>=>))
 import           Control.Monad.IO.Class       (MonadIO, liftIO)
-import           Control.Monad.Trans.Resource (ResourceT, allocate)
+import           Control.Monad.Trans.Resource (ResourceT, allocate, runResourceT)
+import           Data.Bits                    ((.&.))
 import qualified Data.ByteString.Char8        as BS
 import           Foreign                      (Ptr, Storable, alloca, nullPtr,
                                                peek, poke)
 import           Foreign.C.Types
-import Foreign.Marshal.Alloc (free, malloc)
+import           Foreign.Marshal.Alloc        (free, malloc)
 
 import           Network.Security.GssTypes
 
@@ -58,9 +58,13 @@ foreign import capi "gssapi/gssapi.h value GSS_C_NO_BUFFER" gssCNoBuffer :: Ptr 
 foreign import capi "gssapi/gssapi.h value GSS_C_MECH_CODE" gssCMechCode :: CUInt
 
 foreign import capi "gssapi/gssapi.h GSS_ERROR" _gssError :: CUInt -> CUInt
+foreign import capi "gssapi/gssapi.h value GSS_S_CONTINUE_NEEDED" _gssSContinueNeeded :: CUInt
 
 gssError :: CUInt -> Bool
 gssError major = _gssError major /= 0
+
+gssContinueNeeded :: CUInt -> Bool
+gssContinueNeeded status = status .&. _gssSContinueNeeded /= 0
 
 foreign import ccall unsafe "gssapi/gssapi.h gss_import_name"
   _gss_import_name :: Ptr CUInt -> Ptr BufferDesc -> GssOID -> Ptr GssNameT -> IO CUInt
@@ -93,6 +97,18 @@ peekBuffer :: Ptr BufferDesc -> IO BS.ByteString
 peekBuffer bdesc = do
   (BufferDesc len ptr) <- peek bdesc
   BS.packCStringLen (ptr, len)
+
+---
+withBufferDesc :: BS.ByteString -> (Ptr BufferDesc -> IO a) -> IO a
+withBufferDesc "" code =
+  alloca $ \bdesc -> do
+      poke bdesc (BufferDesc 0 nullPtr)
+      code bdesc `finally` gssReleaseBuffer bdesc
+withBufferDesc str code =
+  BS.useAsCStringLen str $ \(cstr, len) ->
+    alloca $ \bdesc -> do
+      poke bdesc (BufferDesc len cstr)
+      code bdesc
 
 gssDisplayName :: MonadIO m => GssNameT -> m BS.ByteString
 gssDisplayName gname =
@@ -156,8 +172,8 @@ foreign import ccall unsafe "gssapi/gssapi.h gss_delete_sec_context"
   _gss_delete_sec_context :: Ptr CUInt -> Ptr GssCtxIdT -> Ptr BufferDesc -> IO CUInt
 
 data SecContextResult = SecContextResult {
-    sContext :: Ptr GssCtxIdT
-  , sClientName :: BS.ByteString
+    sContext     :: Ptr GssCtxIdT
+  , sClientName  :: BS.ByteString
   , sOutputToken :: BS.ByteString
 }
 
@@ -179,19 +195,16 @@ gssAcceptSecContext myCreds input = snd <$> allocate runAccept freeResult
                               gssCNoChannelBindings bclient nullPtr
                               boutput nullPtr nullPtr nullPtr
                 whenGssOk major minor $ do
+                    when (gssContinueNeeded major) $ throwIO (GssException 0 "Only one auth interaction allowed.")
                     clname <- peek bclient
                     sClientName <- gssDisplayName clname `finally` gssReleaseName clname
                     sOutputToken <- peekBuffer boutput
                     return SecContextResult{..}
 
----
-withBufferDesc :: BS.ByteString -> (Ptr BufferDesc -> IO a) -> IO a
-withBufferDesc "" code =
-  alloca $ \bdesc -> do
-      poke bdesc (BufferDesc 0 nullPtr)
-      code bdesc `finally` gssReleaseBuffer bdesc
-withBufferDesc str code =
-  BS.useAsCStringLen str $ \(cstr, len) ->
-    alloca $ \bdesc -> do
-      poke bdesc (BufferDesc len cstr)
-      code bdesc
+
+runGssCheck :: Maybe BS.ByteString -> BS.ByteString -> IO (BS.ByteString, BS.ByteString)
+runGssCheck mcredname input_token =
+  runResourceT $ do
+      cred <- maybe (return gssCNoCredential) (gssImportName >=> gssAcquireCred) mcredname
+      ctx <- gssAcceptSecContext cred input_token
+      return (sClientName ctx, sOutputToken ctx)
