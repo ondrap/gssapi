@@ -2,7 +2,7 @@ name:                haskell-gssapi
 version:             0.1.0.0
 synopsis:            libgssapi and libkrb5 bindings for haskell
 description:         Simple bindings for libgssapi(SSO) and libkrb5(user/password) library.
-                     Basic 
+                     Basic
 license:             BSD3
 license-file:        LICENSE
 author:              Ondrej Palkovsky
@@ -10,7 +10,7 @@ maintainer:          palkovsky.ondrej@gmail.com
 copyright:           Ondrej Palkovsky
 category:            Network
 build-type:          Simple
-extra-source-files:  examples/Main.hs examples/stack.yaml examples/haskell-gssapi-test.cabal
+extra-source-files:  examples/Main.hs examples/stack.yaml examples/haskell-gssapi-test.cabal clib/hkrb5.h
 cabal-version:       >=1.10
 
 library
