@@ -54,10 +54,10 @@ main = do
 From a Windows cmd.exe window, generate the service principals and keytabs for this user. You need an SPN named `host/foo.example.com`, and another named `HTTP/foo.example.com`. It is crucial that foo.example.com is the DNS name of your web site in the intranet, and it is an A record. Given that app.example is the account name you created, you would execute:
 
     C:\> ktpass -princ host/foo.example.com@EXAMPLE.COM -mapuser
-    EXAMPLECOM\app.example -pass * -out host.keytab -ptype KRB5_NT_PRINCIPAL
+    EXAMPLECOM\app.example -pass * -out host.keytab -ptype KRB5_NT_PRINCIPAL -crypto All
 
     C:\> ktpass -princ HTTP/foo.example.com@EXAMPLE.COM -mapuser
-    EXAMPLECOM\app.example -pass * -out http.keytab -ptype KRB5_NT_PRINCIPAL
+    EXAMPLECOM\app.example -pass * -out http.keytab -ptype KRB5_NT_PRINCIPAL -crypto All
 
 Verify that the correct SPNs are created:
 
