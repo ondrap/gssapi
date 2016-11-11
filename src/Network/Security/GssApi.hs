@@ -24,10 +24,9 @@ import           Foreign.Marshal.Alloc        (free, malloc)
 
 import           Network.Security.GssTypes
 
-data GssException = GssException Word String
+data GssException = GssException Word BS.ByteString
   deriving (Show)
 instance Exception GssException
-
 
 newtype {-# CTYPE "gss_OID_desc" #-} GssOID = GssOID (Ptr ())
 foreign import capi "gssapi/gssapi_krb5.h value GSS_KRB5_NT_PRINCIPAL_NAME" gssKrb5NtPrincipalName :: GssOID
@@ -129,7 +128,7 @@ whenGssOk major minor code
   where
     throwGssException status = do
       errtxt <- gssDisplayStatus status
-      throwIO $ GssException (fromIntegral status) (BS.unpack errtxt)
+      throwIO $ GssException (fromIntegral status) errtxt
 
 gssDisplayStatus :: CUInt -> IO BS.ByteString
 gssDisplayStatus rstatus =

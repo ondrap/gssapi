@@ -1,6 +1,7 @@
 {-# LANGUAGE EmptyDataDecls           #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE MultiWayIf               #-}
+{-# LANGUAGE OverloadedStrings        #-}
 
 module Network.Security.Kerberos (
     krb5Login
@@ -8,18 +9,17 @@ module Network.Security.Kerberos (
   , KrbException(..)
 ) where
 
-import           Control.Exception     (Exception, bracket, throwIO, mask_)
+import           Control.Exception     (Exception, bracket, mask_, throwIO)
 import           Control.Monad         (when)
 import qualified Data.ByteString.Char8 as BS
 import           Foreign
 import           Foreign.C.String
 import           Foreign.C.Types
 
--- | Exception that can be thrown from calling kerberos functions
-data KrbException = KrbException Int String
+
+data KrbException = KrbException Word BS.ByteString
   deriving (Show)
 instance Exception KrbException
-
 
 data KerberosCTX
 data KerberosPrincipal
@@ -84,7 +84,7 @@ foreign import ccall unsafe "krb5.h krb5_free_error_message"
 krb5_throw :: Context -> CInt -> IO a
 krb5_throw ctx code = do
     ctxt <- _krb5_get_error_message ctx code
-    errtext <- BS.unpack <$> BS.packCString ctxt
+    errtext <- BS.packCString ctxt
     _krb5_free_error_message ctx ctxt
     throwIO (KrbException (fromIntegral code) errtext)
 

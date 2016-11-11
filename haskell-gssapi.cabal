@@ -1,7 +1,8 @@
 name:                haskell-gssapi
 version:             0.1.0.0
-synopsis:            libgssapi and krb5 bindings for haskell
--- description:
+synopsis:            libgssapi and libkrb5 bindings for haskell
+description:         Simple bindings for libgssapi(SSO) and libkrb5(user/password) library.
+                     Basic 
 license:             BSD3
 license-file:        LICENSE
 author:              Ondrej Palkovsky
@@ -9,26 +10,19 @@ maintainer:          palkovsky.ondrej@gmail.com
 copyright:           Ondrej Palkovsky
 category:            Network
 build-type:          Simple
--- extra-source-files:
+extra-source-files:  examples/Main.hs examples/stack.yaml examples/haskell-gssapi-test.cabal
 cabal-version:       >=1.10
 
 library
-  -- exposed-modules:     Network.Security.Kerberos, Network.Security.GssApi
-  -- c-sources:           clib/hkrb5.c
-  -- includes:            clib/hkrb5.h
-  exposed-modules:     Network.Security.GssApi
+  exposed-modules:     Network.Security.Kerberos, Network.Security.GssApi, Network.Wai.Middleware.GssAuth
   other-modules:       Network.Security.GssTypes
+  c-sources:           clib/hkrb5.c
+  includes:            clib/hkrb5.h
 
-  build-depends:       base >=4.8 && <4.9, bytestring, resourcet, transformers
+  build-depends:       base >=4.8 && <4.10, bytestring, resourcet, transformers,
+                       case-insensitive, base64-bytestring, wai, http-types,
+                       vault, wai-extra
   default-language:    Haskell2010
   ghc-options:         -Wall -fwarn-incomplete-uni-patterns
-  extra-libraries:     gssapi_krb5
+  extra-libraries:     gssapi_krb5, krb5
   hs-source-dirs:      src
-
-executable test
-  build-depends:       base >=4.8 && <4.9, haskell-gssapi, bytestring,
-                       resourcet, transformers, warp, wai, http-types,
-                       case-insensitive, base64-bytestring, warp-tls
-  main-is:             Test.hs
-  ghc-options:         -Wall -fwarn-incomplete-uni-patterns -threaded
-  default-language:    Haskell2010
