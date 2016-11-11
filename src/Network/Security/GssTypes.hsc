@@ -1,4 +1,6 @@
-{-# LANGUAGE CPP                      #-}
+{-# OPTIONS_HADDOCK hide #-}
+{-# LANGUAGE CPP         #-}
+
 module Network.Security.GssTypes where
 
 import           Foreign

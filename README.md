@@ -14,7 +14,7 @@ This library provides a simplified kerberos and GSSAPI bindings for the SPNEGO a
 Generally you need to use TLS. The library provides wai middleware component to ease use. The username is saved
 to a vault.
 
-````
+````haskell
 import           Data.ByteString.Lazy.Char8     (fromStrict)
 import           Data.Function                  ((&))
 import           Data.Maybe                     (fromMaybe)

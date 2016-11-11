@@ -24,6 +24,7 @@ import           Foreign.Marshal.Alloc        (free, malloc)
 
 import           Network.Security.GssTypes
 
+-- | Exception that can be thrown by functions from this module
 data GssException = GssException Word BS.ByteString
   deriving (Show)
 instance Exception GssException
@@ -201,7 +202,10 @@ gssAcceptSecContext myCreds input = snd <$> allocate runAccept freeResult
                     return SecContextResult{..}
 
 
-runGssCheck :: Maybe BS.ByteString -> BS.ByteString -> IO (BS.ByteString, BS.ByteString)
+runGssCheck ::
+     Maybe BS.ByteString -- ^ Principal name
+  -> BS.ByteString       -- ^ Input token
+  -> IO (BS.ByteString, BS.ByteString) -- ^ (client name, output token)
 runGssCheck mcredname input_token =
   runResourceT $ do
       cred <- maybe (return gssCNoCredential) (gssImportName >=> gssAcquireCred) mcredname

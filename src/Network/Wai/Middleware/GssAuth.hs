@@ -5,7 +5,6 @@ module Network.Wai.Middleware.GssAuth (
     gssAuth
   , GssAuthSettings(..)
   , defaultGssSettings
-  , GssException(..)
   , gssAuthKey
 ) where
 
@@ -32,14 +31,18 @@ import           Network.Security.GssApi
 import           Network.Security.Kerberos
 
 data GssAuthSettings = GssAuthSettings {
-    gssRealm         :: Maybe BS.ByteString
-  , gssService       :: Maybe BS.ByteString
-  , gssUserFull      :: Bool
-  , gssBasicFailback :: Bool
-  , gssForceRealm    :: Bool
+    gssRealm         :: Maybe BS.ByteString -- ^ Realm to use with both kerberos and gss authentication.
+  , gssService       :: Maybe BS.ByteString -- ^ If set, use 'gssService@gssRealm' credentials from the keytab.
+                                            --   May contain the whole principal, in such case `gssRealm` is used only for
+                                            --   kerberos user/password authentication.
+  , gssUserFull      :: Bool -- ^ Always return full user principal; normally, if the user realm is equal to gssRealm,
+                             --   the realm is stripped
+  , gssBasicFailback :: Bool -- ^ Allow failback to basic auth (username/password with kerberos api)
+  , gssForceRealm    :: Bool -- ^ Force use of `gssRealm` or default system realm in Basic auth
   , gssOnAuthError   :: GssAuthSettings -> Maybe (Either KrbException GssException) -> Application
 }
 
+-- | Settings for `gssAuth` middleware
 defaultGssSettings :: GssAuthSettings
 defaultGssSettings = GssAuthSettings {
     gssRealm = Nothing
@@ -62,11 +65,12 @@ defaultGssSettings = GssAuthSettings {
     authError settings (Just (Right (GssException _ err))) _ respond =
         respond $ responseLBS status401 (authHeaders settings) (BSL.fromStrict $ "Unauthorized: " <> err)
 
+-- | Key that is used to access the username in WAI vault
 gssAuthKey :: V.Key BS.ByteString
 gssAuthKey = unsafePerformIO V.newKey
 {-# NOINLINE gssAuthKey #-}
 
-
+-- | Middleware that provides SSO capabilites
 gssAuth :: GssAuthSettings -> Middleware
 gssAuth settings@GssAuthSettings{..} iapp req respond = do
     let hdrs = requestHeaders req
@@ -74,7 +78,7 @@ gssAuth settings@GssAuthSettings{..} iapp req respond = do
       Just val
           | Just token <- getSpnegoToken val ->
               runSpnegoCheck token `catch` (\exc -> gssOnAuthError settings (Just (Right exc)) req respond)
-          | Just (user,password) <- extractBasicAuth val ->
+          | Just (user, password) <- extractBasicAuth val ->
               runKerberosCheck user password `catch` (\exc -> gssOnAuthError settings (Just (Left exc)) req respond)
       _ -> gssOnAuthError settings Nothing req respond
     where
@@ -95,7 +99,9 @@ gssAuth settings@GssAuthSettings{..} iapp req respond = do
           iapp (insertUserToVault req user) respond
 
       runSpnegoCheck token = do
-          let service = (<> fromMaybe "" (("@" <>) <$> gssRealm)) <$> gssService
+          let service
+                | Just svc <- gssService, '@' `BS.elem` svc = gssService
+                | otherwise = (<> fromMaybe "" (("@" <>) <$> gssRealm)) <$> gssService
           (user, output) <- runGssCheck service token
           let neghdr = (hWWWAuthenticate, "Negotiate " <> B64.encode output)
           iapp (insertUserToVault req user) (respond . mapResponseHeaders (neghdr :))

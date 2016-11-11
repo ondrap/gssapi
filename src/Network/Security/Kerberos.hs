@@ -16,7 +16,7 @@ import           Foreign
 import           Foreign.C.String
 import           Foreign.C.Types
 
-
+-- | Exception raised by this module
 data KrbException = KrbException Word BS.ByteString
   deriving (Show)
 instance Exception KrbException
@@ -98,15 +98,14 @@ krb5_login ctx principal password = do
           _krb5_login ctx ptrprincipal cpass
   when (code /= 0) $ krb5_throw ctx code
 
--- | Try to login with servicename and password
--- If logging fails, exception is raised
+-- | Try to login with principal and password. If logging fails, exception is raised
 krb5Login :: BS.ByteString -> BS.ByteString -> IO ()
 krb5Login svcname password =
   withKrbContext $ \ctx -> do
       principal <- krb5_parse_name ctx svcname
       krb5_login ctx principal password
 
--- | Call 'krb5_unparse . krb5_parse' and return result
+-- | Call 'krb5_unparse . krb5_parse' - i.e. add system-wide default realm to the principal name
 krb5Resolve :: BS.ByteString -> IO BS.ByteString
 krb5Resolve svcname =
   withKrbContext $ \ctx -> do
