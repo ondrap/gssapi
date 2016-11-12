@@ -1,11 +1,12 @@
 {-# LANGUAGE CApiFFI                    #-}
+{-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiWayIf                 #-}
 {-# LANGUAGE NamedFieldPuns             #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RecordWildCards            #-}
 
--- | FFI binding to libgssapi 
+-- | FFI binding to libgssapi
 module Network.Security.GssApi (
     runGssCheck
   , GssException(..)
@@ -15,7 +16,8 @@ import           Control.Exception            (Exception, bracketOnError,
                                                finally, mask_, throwIO)
 import           Control.Monad                (void, when, (>=>))
 import           Control.Monad.IO.Class       (MonadIO, liftIO)
-import           Control.Monad.Trans.Resource (ResourceT, allocate, runResourceT)
+import           Control.Monad.Trans.Resource (ResourceT, allocate,
+                                               runResourceT)
 import           Data.Bits                    ((.&.))
 import qualified Data.ByteString.Char8        as BS
 import           Foreign                      (Ptr, Storable, alloca, nullPtr,
@@ -30,7 +32,8 @@ data GssException = GssException Word BS.ByteString
   deriving (Show)
 instance Exception GssException
 
-newtype {-# CTYPE "gss_OID_desc" #-} GssOID = GssOID (Ptr ())
+data {-# CTYPE "const struct gss_OID_desc_struct" #-} OidDescStruct
+newtype {-# CTYPE "gss_OID_desc" #-} GssOID = GssOID (Ptr OidDescStruct)
 foreign import capi "gssapi/gssapi_krb5.h value GSS_KRB5_NT_PRINCIPAL_NAME" gssKrb5NtPrincipalName :: GssOID
 foreign import capi "gssapi/gssapi_krb5.h value GSS_C_NO_OID" gssCNoOid :: GssOID
 
@@ -197,8 +200,11 @@ gssAcceptSecContext myCreds input = snd <$> allocate runAccept freeResult
                               gssCNoChannelBindings bclient nullPtr
                               boutput nullPtr nullPtr nullPtr
                 whenGssOk major minor $ do
-                    when (gssContinueNeeded major) $ throwIO (GssException 0 "Only one auth interaction allowed.")
                     clname <- peek bclient
+                    when (gssContinueNeeded major) $ do
+                        void $ _gss_delete_sec_context minor sContext gssCNoBuffer
+                        gssReleaseName clname
+                        throwIO (GssException 0 "Only one auth interaction allowed.")
                     sClientName <- gssDisplayName clname `finally` gssReleaseName clname
                     sOutputToken <- peekBuffer boutput
                     return SecContextResult{..}
