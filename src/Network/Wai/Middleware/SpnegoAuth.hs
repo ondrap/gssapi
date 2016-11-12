@@ -2,7 +2,7 @@
 {-# LANGUAGE RecordWildCards   #-}
 
 -- |
--- Module : Network.Wai.Middleware.GssAuth
+-- Module : Network.Wai.Middleware.SpnegoAuth
 -- License : BSD-style
 --
 -- Maintainer  : palkovsky.ondrej@gmail.com
@@ -12,11 +12,11 @@
 -- WAI Middleware for SPNEGO authentication with failback to Basic authentication, where
 -- the username/password is checked using Kerberos library (i.e. kinit user@EXAMPLE.COM).
 
-module Network.Wai.Middleware.GssAuth (
-    gssAuth
-  , GssAuthSettings(..)
-  , defaultGssSettings
-  , gssAuthKey
+module Network.Wai.Middleware.SpnegoAuth (
+    spnegoAuth
+  , SpnegoAuthSettings(..)
+  , defaultSpnegoSettings
+  , spnegoAuthKey
 ) where
 
 import           Control.Arrow                   (second)
@@ -40,37 +40,37 @@ import           System.IO.Unsafe
 import           Network.Security.GssApi
 import           Network.Security.Kerberos
 
--- | Configuration structure for `gssAuth` middleware
-data GssAuthSettings = GssAuthSettings {
-    gssRealm         :: Maybe BS.ByteString -- ^ Realm to use with both kerberos and gss authentication.
-  , gssService       :: Maybe BS.ByteString -- ^ If set, use 'gssService@gssRealm' credentials from the keytab.
-                                            --   May contain the whole principal, in such case `gssRealm` is used only for
+-- | Configuration structure for `spnegoAuth` middleware
+data SpnegoAuthSettings = SpnegoAuthSettings {
+    spnegoRealm         :: Maybe BS.ByteString -- ^ Realm to use with both kerberos and spnego authentication.
+  , spnegoService       :: Maybe BS.ByteString -- ^ If set, use 'spnegoService@spnegoRealm' credentials from the keytab.
+                                            --   May contain the whole principal, in such case `spnegoRealm` is used only for
                                             --   kerberos user/password authentication.
-  , gssUserFull      :: Bool -- ^ Always return full user principal; normally, if the user realm is equal to gssRealm,
+  , spnegoUserFull      :: Bool -- ^ Always return full user principal; normally, if the user realm is equal to spnegoRealm,
                              --   the realm is stripped
-  , gssBasicFailback :: Bool -- ^ Allow failback to basic auth (username/password with kerberos api)
-  , gssForceRealm    :: Bool -- ^ Force use of `gssRealm` or default system realm in basic auth failback
-  , gssOnAuthError   :: GssAuthSettings -> Maybe (Either KrbException GssException) -> Application
+  , spnegoBasicFailback :: Bool -- ^ Allow failback to basic auth (username/password with kerberos api)
+  , spnegoForceRealm    :: Bool -- ^ Force use of `spnegoRealm` or default system realm in basic auth failback
+  , spnegoOnAuthError   :: SpnegoAuthSettings -> Maybe (Either KrbException GssException) -> Application
     -- ^ Called upon GSSAPI/Kerberos error. It is supposed to return 401 return code with
     --   'Authorize: Negotiate' and possibly 'Authorize: Basic realm=...' headers
 }
 
--- | Default settings for `gssAuth` middleware
-defaultGssSettings :: GssAuthSettings
-defaultGssSettings = GssAuthSettings {
-    gssRealm = Nothing
-  , gssService = Nothing
-  , gssUserFull = False
-  , gssBasicFailback = True
-  , gssForceRealm = True
-  , gssOnAuthError = authError
+-- | Default settings for `spnegoAuth` middleware
+defaultSpnegoSettings :: SpnegoAuthSettings
+defaultSpnegoSettings = SpnegoAuthSettings {
+    spnegoRealm = Nothing
+  , spnegoService = Nothing
+  , spnegoUserFull = False
+  , spnegoBasicFailback = True
+  , spnegoForceRealm = True
+  , spnegoOnAuthError = authError
   }
   where
-    authHeaders GssAuthSettings{gssBasicFailback=True, gssRealm=Just realm} =
+    authHeaders SpnegoAuthSettings{spnegoBasicFailback=True, spnegoRealm=Just realm} =
         [(hWWWAuthenticate, "Negotiate"), (hWWWAuthenticate, "Basic realm=\"" <> realm <> "\"")]
-    authHeaders GssAuthSettings{gssBasicFailback=True, gssRealm=Nothing} =
+    authHeaders SpnegoAuthSettings{spnegoBasicFailback=True, spnegoRealm=Nothing} =
         [(hWWWAuthenticate, "Negotiate"), (hWWWAuthenticate, "Basic realm=\"Auth\"")]
-    authHeaders GssAuthSettings{gssBasicFailback=False} = [(hWWWAuthenticate, "Negotiate")]
+    authHeaders SpnegoAuthSettings{spnegoBasicFailback=False} = [(hWWWAuthenticate, "Negotiate")]
 
     baseResponse settings respond = respond $ responseLBS status401 (authHeaders settings) "Unauthorized"
 
@@ -83,29 +83,29 @@ defaultGssSettings = GssAuthSettings {
         baseResponse settings respond
 
 -- | Key that is used to access the username in WAI vault
-gssAuthKey :: V.Key BS.ByteString
-gssAuthKey = unsafePerformIO V.newKey
-{-# NOINLINE gssAuthKey #-}
+spnegoAuthKey :: V.Key BS.ByteString
+spnegoAuthKey = unsafePerformIO V.newKey
+{-# NOINLINE spnegoAuthKey #-}
 
 -- | Middleware that provides SSO capabilites
-gssAuth :: GssAuthSettings -> Middleware
-gssAuth settings@GssAuthSettings{..} iapp req respond = do
+spnegoAuth :: SpnegoAuthSettings -> Middleware
+spnegoAuth settings@SpnegoAuthSettings{..} iapp req respond = do
     let hdrs = requestHeaders req
     case lookup hAuthorization hdrs of
       Just val
           | Just token <- getSpnegoToken val ->
-              runSpnegoCheck token `catch` (\exc -> gssOnAuthError settings (Just (Right exc)) req respond)
+              runSpnegoCheck token `catch` (\exc -> spnegoOnAuthError settings (Just (Right exc)) req respond)
           | Just (user, password) <- extractBasicAuth val ->
-              runKerberosCheck user password `catch` (\exc -> gssOnAuthError settings (Just (Left exc)) req respond)
-      _ -> gssOnAuthError settings Nothing req respond
+              runKerberosCheck user password `catch` (\exc -> spnegoOnAuthError settings (Just (Left exc)) req respond)
+      _ -> spnegoOnAuthError settings Nothing req respond
     where
       insertUserToVault myreq user = req{vault = vault'}
           where
-            vault' = V.insert gssAuthKey (stripGssRealm user) (vault myreq)
+            vault' = V.insert spnegoAuthKey (stripSpnegoRealm user) (vault myreq)
 
       modifyKrbUser orig_user
-        | gssForceRealm = user <> fromMaybe "" (("@" <>) <$> gssRealm)
-        | BS.null realm, Just newrealm <- gssRealm = user <> "@" <> newrealm
+        | spnegoForceRealm = user <> fromMaybe "" (("@" <>) <$> spnegoRealm)
+        | BS.null realm, Just newrealm <- spnegoRealm = user <> "@" <> newrealm
         | otherwise = orig_user
         where
           (user, realm) = splitPrincipal orig_user
@@ -117,16 +117,16 @@ gssAuth settings@GssAuthSettings{..} iapp req respond = do
 
       runSpnegoCheck token = do
           let service
-                | Just svc <- gssService, '@' `BS.elem` svc = gssService
-                | otherwise = (<> fromMaybe "" (("@" <>) <$> gssRealm)) <$> gssService
+                | Just svc <- spnegoService, '@' `BS.elem` svc = spnegoService
+                | otherwise = (<> fromMaybe "" (("@" <>) <$> spnegoRealm)) <$> spnegoService
           (user, output) <- runGssCheck service token
           let neghdr = (hWWWAuthenticate, "Negotiate " <> B64.encode output)
           iapp (insertUserToVault req user) (respond . mapResponseHeaders (neghdr :))
 
-      -- Strip Realm, if gssUserFull is not set and the realm equals to gssRealm
-      stripGssRealm user
-        | not gssUserFull, (clservice, clrealm) <- splitPrincipal user,
-            Just clrealm == gssRealm = clservice
+      -- Strip Realm, if spnegoUserFull is not set and the realm equals to spnegoRealm
+      stripSpnegoRealm user
+        | not spnegoUserFull, (clservice, clrealm) <- splitPrincipal user,
+            Just clrealm == spnegoRealm = clservice
         | otherwise = user
 
       getSpnegoToken :: BS.ByteString -> Maybe BS.ByteString

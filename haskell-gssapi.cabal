@@ -22,7 +22,7 @@ source-repository head
   location: https://github.com/ondrap/haskell-gssapi.git
 
 library
-  exposed-modules:     Network.Security.Kerberos, Network.Security.GssApi, Network.Wai.Middleware.GssAuth
+  exposed-modules:     Network.Security.Kerberos, Network.Security.GssApi, Network.Wai.Middleware.SpnegoAuth
   other-modules:       Network.Security.GssTypes
   c-sources:           clib/hkrb5.c
   includes:            clib/hkrb5.h
