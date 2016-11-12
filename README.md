@@ -18,6 +18,8 @@ The library provides wai middleware component to ease use. The username is saved
 to a vault.
 
 ````haskell
+{-# LANGUAGE OverloadedStrings #-}
+module Main where
 import           Data.ByteString.Lazy.Char8     (fromStrict)
 import           Data.Function                  ((&))
 import           Data.Maybe                     (fromMaybe)

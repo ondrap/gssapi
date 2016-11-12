@@ -99,7 +99,7 @@ spnegoAuth settings@SpnegoAuthSettings{..} iapp req respond = do
               runKerberosCheck user password `catch` (\exc -> spnegoOnAuthError settings (Just (Left exc)) req respond)
       _ -> spnegoOnAuthError settings Nothing req respond
     where
-      insertUserToVault myreq user = req{vault = vault'}
+      insertUserToVault myreq user = myreq{vault = vault'}
           where
             vault' = V.insert spnegoAuthKey (stripSpnegoRealm user) (vault myreq)
 
