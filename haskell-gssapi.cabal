@@ -14,7 +14,7 @@ homepage:            https://github.com/ondrap/haskell-gssapi
 copyright:           Ondrej Palkovsky
 category:            Network
 build-type:          Simple
-extra-source-files:  examples/Main.hs examples/stack.yaml examples/haskell-gssapi-test.cabal clib/hkrb5.h
+extra-source-files:  examples/Main.hs examples/stack.yaml examples/haskell-gssapi-test.cabal clib/hkrb5.h README.md
 cabal-version:       >=1.10
 
 source-repository head
