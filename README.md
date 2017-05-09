@@ -70,3 +70,18 @@ Make the keytab file accessible only by appropriate users or groups
 
     # chmod 440 /etc/krb5.keytab
     # chown root:nginx /etc/krb5.keytab
+
+#### There are some issues regarding kvno changes
+
+You can generate keys on the server by
+
+    $ kinit ....
+    # Note down kvno from next commands
+    $ kvno HTTP/machine.domain.org@DOMAIN.ORG
+    $ kvno host/machine.domain.org@DOMAIN.ORG
+    # Add new keys to /etc/krb5.keytab (enter -k KVNO from previous commands)
+    # Use the ciphers you need for your systems
+    $ ktutil
+    addent -password -p HTTP/machine.domain.org@DOMAIN.ORG -k 12 -e arcfour-hmac
+    addent -password -p host/machine.domain.org@DOMAIN.ORG -k 12 -e arcfour-hmac
+    wkt /etc/krb5.keytab
