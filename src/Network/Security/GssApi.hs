@@ -28,7 +28,7 @@ import           Foreign.Marshal.Alloc        (free, malloc)
 import           Network.Security.GssTypes
 
 -- | Exception that can be thrown by functions from this module
-data GssException = GssException Word BS.ByteString
+data GssException = GssException Word BS.ByteString Word BS.ByteString
   deriving (Show)
 instance Exception GssException
 
@@ -60,6 +60,7 @@ foreign import capi "gssapi/gssapi.h value GSS_C_NO_CHANNEL_BINDINGS" gssCNoChan
 foreign import capi "gssapi/gssapi.h value GSS_C_NO_BUFFER" gssCNoBuffer :: Ptr BufferDesc
 
 foreign import capi "gssapi/gssapi.h value GSS_C_MECH_CODE" gssCMechCode :: CUInt
+foreign import capi "gssapi/gssapi.h value GSS_C_GSS_CODE" gssCGSSCode :: CUInt
 
 foreign import capi "gssapi/gssapi.h GSS_ERROR" _gssError :: CUInt -> CUInt
 foreign import capi "gssapi/gssapi.h value GSS_S_CONTINUE_NEEDED" _gssSContinueNeeded :: CUInt
@@ -132,19 +133,21 @@ whenGssOk major minor code
   | otherwise = code
   where
     throwGssException status = do
-      errtxt <- gssDisplayStatus status
-      throwIO $ GssException (fromIntegral status) errtxt
+      majorTxt <- gssDisplayStatus gssCGSSCode major
+      minorTxt <- gssDisplayStatus gssCMechCode status
+      throwIO $ GssException (fromIntegral major) majorTxt (fromIntegral status) minorTxt
 
-gssDisplayStatus :: CUInt -> IO BS.ByteString
-gssDisplayStatus rstatus =
+gssDisplayStatus :: CUInt -> CUInt -> IO BS.ByteString
+gssDisplayStatus statusType rstatus =
   alloca $ \minor ->
       alloca $ \msgctx -> do
           poke msgctx 0
           withBufferDesc "" $ \bdesc -> do
               -- TODO: This could produce more than 1 line, we should fetch all of them
               poke bdesc (BufferDesc 0 nullPtr)
-              major <- _gss_display_status minor rstatus gssCMechCode gssCNoOid msgctx bdesc
-              whenGssOk major minor $ peekBuffer bdesc
+              major <- _gss_display_status minor rstatus statusType gssCNoOid msgctx bdesc
+              if | gssError major -> return ""
+                 | otherwise -> peekBuffer bdesc
 
 foreign import ccall safe "gssapi/gssapi.h gss_acquire_cred"
   _gss_acquire_cred :: Ptr CUInt -> GssNameT -> CUInt -> GssOIDSet -> GssCredUsageT -> Ptr GssCredIdT -> Ptr GssOIDSet -> Ptr CUInt -> IO CUInt
@@ -204,7 +207,7 @@ gssAcceptSecContext myCreds input = snd <$> allocate runAccept freeResult
                     when (gssContinueNeeded major) $ do
                         void $ _gss_delete_sec_context minor sContext gssCNoBuffer
                         gssReleaseName clname
-                        throwIO (GssException 0 "Only one auth interaction allowed.")
+                        throwIO (GssException 0 "Only one auth interaction allowed." 0 "")
                     sClientName <- gssDisplayName clname `finally` gssReleaseName clname
                     sOutputToken <- peekBuffer boutput
                     return SecContextResult{..}
