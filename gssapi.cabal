@@ -1,5 +1,5 @@
 name:                gssapi
-version:             0.2.0.0
+version:             0.2.0.1
 synopsis:            libgssapi and libkrb5 bindings for haskell
 description:         Simple bindings for libgssapi(SSO) and libkrb5(user/password) library.
 license:             BSD3
